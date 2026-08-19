@@ -398,7 +398,9 @@ def main() -> None:
                 "language_info": {"name": "python", "version": sys.version.split()[0]},
             },
             "nbformat": 4,
-            "nbformat_minor": 5,
+                        # 4.4 rather than 4.5: 4.5 requires a per-cell id, and the
+            # notebooks are generated, so stable ids would be noise in diffs.
+            "nbformat_minor": 4,
         }
         (NOTEBOOKS / name).write_text(
             json.dumps(document, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
