@@ -3,22 +3,46 @@
 A rule engine that reproduces a manual vulnerability-triage process, and the
 measurement harness that keeps it honest.
 
-Every week a security analyst takes a scan export of tens of thousands of
-findings and sorts each one into an operational bucket: this is superseded by a
-newer plugin, this machine has not been scanned, this app has to be uninstalled,
-this one is an ordinary patch. It is a day of work, it is done in a spreadsheet,
-and it is the kind of judgement that looks trivial to automate right up until you
-measure yourself against it.
+## About this repository
 
-This repo is the distilled version of that problem: the parsing, the rule engine,
-and — the part that mattered most — the harness that decides whether a proposed
-rule is real or is reading the base rate back to you.
+This is the most recent thing I've been working on, and the piece of it I can
+show publicly.
 
-> **The data is synthetic.** `src/synthetic.py` generates an export whose
-> *structure* reproduces the real one: the shapes of plugin titles, which
-> products have two live version branches, and a residual of human judgement that
-> nothing in the data explains. No client data, names or identifiers are in this
-> repository.
+The original is a production system: every week a security analyst takes a scan
+export of roughly 150,000 findings and sorts each one into an operational bucket
+— this is superseded by a newer plugin, this machine hasn't been scanned, this
+app has to be uninstalled, this one is an ordinary patch. It's a day of work,
+it's done in a spreadsheet, and it's the kind of judgement that looks trivial to
+automate right up until you measure yourself against it. I've been building the
+engine that reproduces it, and the harness that tells me whether it's actually
+right.
+
+I can't publish that codebase. It carries client identifiers, infrastructure
+details and credentials, and stripping those by hand is exactly the kind of task
+where you miss one. So I used Claude to help me port the logic out of that
+environment and scrub anything sensitive — the same way I pair with it day to day
+— and then went through the result myself.
+
+**That means some things here differ from production on purpose:**
+
+- **pandas instead of PySpark.** The original runs on Spark over Microsoft
+  Fabric. This runs on a laptop with no cluster, which matters more for something
+  meant to be read than throughput does. The logic ports directly — see the last
+  section.
+- **synthetic data instead of the real export.** `src/synthetic.py` generates
+  data whose *structure* reproduces the real thing: the shapes of plugin titles,
+  which products have two live version branches, and a residual of human
+  judgement that nothing in the data explains. No client data, names or
+  identifiers are anywhere in this repository.
+- **fictional vendors and a trimmed rule set.** Six workflows here against a much
+  larger category contract in production, and invented product names.
+- **the numbers are from the synthetic data**, so they don't match the ones I'd
+  quote from the real system. The *shape* of every result is the same, which is
+  the property that made them worth acting on.
+
+What is faithful, and what I'd actually want to talk about: the parsing, the
+two-level precedence, the supersedence rule itself, and the measurement harness.
+Those are the decisions that cost something to get right.
 
 ## Start here
 
@@ -96,6 +120,8 @@ rule      fired=158   hits=130  precision=0.823
 inverse   fired=1940  hits=146  precision=0.075
 ```
 
+This one retired three rules that had looked reasonable on a recall-only chart.
+
 ## Layout
 
 ```
@@ -117,10 +143,10 @@ python tools/build_notebooks.py     # re-executes the notebooks in place
 
 Python 3.11+, pandas, numpy. No Spark needed.
 
-## On the production version
+## Porting back to Spark
 
-The original runs on PySpark over Microsoft Fabric against ~150k findings a week.
-The logic ports directly — the one piece of real work is the window:
+The logic moves across engines almost unchanged — the one piece of real work is
+the window:
 
 ```python
 # pandas
@@ -131,6 +157,6 @@ F.max("major").over(Window.partitionBy("product"))
 ```
 
 Everything else in `rules.py` is boolean masks, which are the same expression in
-either engine. That symmetry is deliberate: the rules were developed and tested
-locally on a laptop and deployed to the cluster unchanged, which is the only way
-the measure-discard-repeat loop above is fast enough to be worth doing.
+either engine. That symmetry isn't an accident: developing and testing the rules
+locally and deploying them to the cluster unchanged is the only way the
+measure-discard-repeat loop above is fast enough to be worth doing.
